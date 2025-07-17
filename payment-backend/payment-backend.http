@@ -1,0 +1,14 @@
+@payment_backend_HostAddress = http://localhost:5116
+@payment_processor_host = http://localhost:8001
+
+POST {{payment_backend_HostAddress}}/payment/
+Content-Type: application/json
+
+{
+    "CollelationId":"dbee0f5a-5136-40d6-8b51-afddfcdb21c1",
+    "Amount": 19.9
+}
+
+###
+
+GET {{payment_processor_host}}/payments/service-health

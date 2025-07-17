@@ -416,3 +416,13 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+*.tgz
+*.nettrace
+
+apache-jmeter-5.6.3/
+payment-database/
+*docker-compose*
+*.sql
+
+
+trace.speedscope.json
