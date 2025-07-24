@@ -3,6 +3,7 @@ using payment_backend.models;
 using payment_backend.Models;
 using MongoDB.Driver;
 using MongoDB.Bson;
+using System.Text.Json;
 
 namespace payment_backend.Repository;
 
@@ -25,41 +26,49 @@ public class MongoRepository : IRepository
 
     public async Task<Summary> GetSummaryAsync(DateTime From, DateTime To, CancellationToken cancel)
     {
-        var filters = new BsonDocument[3];
+        var filters = new BsonDocument[1];
 
         filters[0] = new BsonDocument("status", true);
-        filters[1] = new BsonDocument("date", new BsonDocument("$gte", From.Date));
-        filters[2] = new BsonDocument("date", new BsonDocument("$lte", From.Date));
 
         var pipeline = new[]
         {
-            new BsonDocument("$match", new BsonDocument($"and", new BsonArray(filters))),
+            new BsonDocument("$match", new BsonDocument("sended", true)),
             new BsonDocument("$group", new BsonDocument
             {
-                { "IsMain", "$IsMain" },
-                { "TotalAmount", new BsonDocument("$sum", "$amount") }
+                { "_id", "$Type" },
+                { "TotalAmount", new BsonDocument("$sum", "$amount") },
+                { "TotalRequests", new BsonDocument("$sum", 1) }
             }),
-            new BsonDocument("$count", "TotalRequets"),
             new BsonDocument("$project", new BsonDocument
             {
-                { "IsMain", "$IsMain" },
-                { "TotalAmount", "$TotalAmount" },
-                { "TotalRequets", "$TotalRequets" },
+                { "_id", 0 },
+                { "TotalAmount", 1 },
+                { "TotalRequests", 1 },
             })
         };
 
         var response = await _collection
             .Aggregate<BsonDocument>(pipeline, cancellationToken: cancel)
-            .ToListAsync();
+            .ToListAsync(cancellationToken: cancel);
 
-        return new Summary(new(1, 1), new(1, 1));
+        return new Summary(
+            new(response[0].AsBsonDocument["TotalRequests"].AsInt32, response[0].AsBsonDocument["TotalAmount"].AsDouble),
+            new(response[1].AsBsonDocument["TotalRequests"].AsInt32, response[1].AsBsonDocument["TotalAmount"].AsDouble)
+        );
     }
 
     public async Task InsertAsync(Payments payment, CancellationToken cancel)
         => await _collection.InsertOneAsync(payment, cancellationToken: cancel);
 
-    public Task UpdateStatusAsync(Payments payments, CancellationToken cancel)
+    public async Task UpdateStatusAsync(string id, string type, bool sended, int attempeds, CancellationToken cancel)
     {
-        throw new NotImplementedException();
+        var filter = Builders<Payments>.Filter.Eq(x => x.CorrelationId, id);
+
+        var updateDefinition = Builders<Payments>.Update
+            .Set(p => p.Type, type)
+            .Set(p => p.Sended, sended)
+            .Set(p => p.Attemped, attempeds);
+
+        await _collection.UpdateOneAsync(filter, updateDefinition, cancellationToken: cancel);
     }
 }

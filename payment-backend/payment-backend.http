@@ -1,14 +1,35 @@
 @payment_backend_HostAddress = http://localhost:5116
 @payment_processor_host = http://localhost:8001
 
+@payment_processor_falback_host = http://localhost:8002
+
 POST {{payment_backend_HostAddress}}/payment/
 Content-Type: application/json
 
 {
-    "CollelationId":"dbee0f5a-5136-40d6-8b51-afddfcdb21c1",
-    "Amount": 19.9
+    "CorrelationId":"f5df29ca-b3dd-42ea-b984-f0ffc1761e57",
+    "Amount": 19.22
 }
 
 ###
+GET {{payment_backend_HostAddress}}/payments-summary?from=2025-07-19&to=2025-07-21
+
+
+####
 
 GET {{payment_processor_host}}/payments/service-health
+
+
+###
+
+GET {{payment_processor_falback_host}}/payments/service-health
+
+
+###
+POST {{payment_processor_host}}/payments
+Content-Type: application/json
+
+{
+    "CorrelationId":"fa858d47-c206-4bc7-85c0-c4cf1a635132",
+    "Amount": 19.22
+}

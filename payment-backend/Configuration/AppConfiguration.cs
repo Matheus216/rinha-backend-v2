@@ -12,7 +12,7 @@ public static class AppConfiguration
 
         app.MapPost("/payment",
             async (
-                Payments request,
+                [FromBody] Payments request,
                 [FromServices] ISendProcessor service,
                 CancellationToken cancel
             ) =>
@@ -20,25 +20,31 @@ public static class AppConfiguration
                 await service.Send(request, cancel);
 
                 return Results.Created(
-                    $"/payment/{request.CollelationId}",
+                    $"/payment/{request.CorrelationId}",
                     request
                 );
             });
 
         app.MapGet("/payments-summary",
             async (
-                Payments request,
+                [FromQuery] DateTime from, 
+                [FromQuery] DateTime to,
                 [FromServices] ISendProcessor service,
                 CancellationToken cancel
             ) =>
             {
-                await service.Send(request, cancel);
-
-                return Results.Created(
-                    $"/payment/{request.CollelationId}",
-                    request
-                );
+                var response = await service.GetSummaryAsync(from, to, cancel); 
+                return Results.Ok(response); 
             });
+
+        app.MapPost("/startstop", () => {
+            ProcessorBackground.StartStop = !ProcessorBackground.StartStop;
+
+            return Results.Ok(new
+            {
+                message = $"altered to {ProcessorBackground.StartStop}"
+            });
+        });
 
         return app;
     }

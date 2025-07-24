@@ -11,27 +11,50 @@ public class ProcessorBackground(
     IRepository repository
 ) : BackgroundService
 {
-    private readonly HttpClient mainClient = factory.CreateClient("main");
-    private readonly HttpClient fallbackClient = factory.CreateClient("fallback");
+    private readonly HttpClient _mainClient = factory.CreateClient("main");
+    private readonly HttpClient _fallbackClient = factory.CreateClient("fallback");
 
+    public static bool StartStop = false;
     protected override async Task ExecuteAsync(CancellationToken cancel)
     {
-        var payments = await repository.GetPaymentsPendingAsync(cancel);
+        Debug.Write("Starting background service");
+        while (!cancel.IsCancellationRequested)
+        {
+            if (StartStop)
+            {
+                try
+                {
+                    var payments = await repository
+                        .GetPaymentsPendingAsync(cancel);
 
-        var fallback = payments.Where(x => x.Attemped >= 3);
-        var main = payments.Where(x => x.Attemped < 3);
+                    var paymentsEnumerable = payments as Payments[] ?? payments.ToArray();
 
-        Task.WaitAll([
-            SendMainAsync(main, cancel),
-            SendFallbackAsync(fallback, cancel)
-        ], cancel);
+                    var paymentsArray = new Payments[paymentsEnumerable.Count()];
+                    paymentsEnumerable.CopyTo(paymentsArray, 0);
+
+                    var fallback = paymentsArray.Where(x => x.Attemped >= 3);
+                    var main = paymentsArray.Where(x => x.Attemped < 3);
+
+                    Task.WaitAll([
+                        SendMainAsync(main, cancel),
+                        SendFallbackAsync(fallback, cancel)
+                    ], cancel);
+                }
+                catch (System.Exception e)
+                {
+                    Debug.Fail($"Error: {e.Message}");
+                }
+            }
+            
+            await Task.Delay(1000, cancel);
+        }
     }
 
     public async Task SendMainAsync(IEnumerable<Payments> payments, CancellationToken cancel)
     {
         foreach (var x in payments)
         {
-            var response = await mainClient.PostAsync(
+            var response = await _mainClient.PostAsync(
                 "/payments/",
                 new StringContent(
                     JsonSerializer.Serialize(x),
@@ -43,15 +66,25 @@ public class ProcessorBackground(
 
             if (response.IsSuccessStatusCode)
             {
-                x.Sended = true;
-                x.IsMain = true;
                 Debug.Write($"Sended: {response.Content}");
-                await repository.UpdateStatusAsync(x, cancel);
+                await repository.UpdateStatusAsync(
+                    x.CorrelationId,
+                    "default",
+                    true,
+                    0,
+                    cancel
+                );
             }
             else
             {
                 x.Attemped++;
-                await repository.UpdateStatusAsync(x, cancel);
+                await repository.UpdateStatusAsync(
+                    x.CorrelationId,
+                    "default",
+                    false,
+                    x.Attemped,
+                    cancel
+                );
                 Debug.Write($"Error request, content: {response.Content}");
             }
         }
@@ -61,7 +94,7 @@ public class ProcessorBackground(
     {
         foreach (var x in payments)
         {
-            var response = await fallbackClient.PostAsync(
+            var response = await _fallbackClient.PostAsync(
                 "/payments/",
                 new StringContent(
                     JsonSerializer.Serialize(x),
@@ -73,16 +106,27 @@ public class ProcessorBackground(
 
             if (response.IsSuccessStatusCode)
             {
-                x.Sended = true;
-                x.IsMain = false;
                 Debug.Write($"Sended: {response.Content}");
-                await repository.UpdateStatusAsync(x, cancel);
+                await repository.UpdateStatusAsync(
+                    x.CorrelationId,
+                    "fallback",
+                    true,
+                    0,
+                    cancel
+                );
             }
             else
             {
-                x.Attemped = 0;
-                await repository.UpdateStatusAsync(x, cancel);
-                Debug.Write($"Error request, content: {response.Content}");
+                x.Attemped++;
+                await repository.UpdateStatusAsync(
+                    x.CorrelationId,
+                    "fallback",
+                    false,
+                    x.Attemped,
+                    cancel
+                );
+                var bodyResponse = response.Content.ReadAsStringAsync();
+                Debug.Write($"Error request, content: {bodyResponse}");
             }
         }
     }

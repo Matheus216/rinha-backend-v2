@@ -8,7 +8,7 @@ public static class StartupConfiguration
 {
     public static IServiceCollection ConfigureDI(this IServiceCollection service)
     {
-        service.AddScoped<IRepository, MongoRepository>();
+        service.AddSingleton<IRepository, MongoRepository>();
         service.AddSingleton<ISendProcessor, SendProcessor>();
 
         service.AddHostedService<ProcessorBackground>();
@@ -30,7 +30,7 @@ public static class StartupConfiguration
 
         service.AddHttpClient("fallback", client =>
         {
-            client.BaseAddress = new(configuration["PROCESSOR:PAYMENT_FALLBACK_URL"] ?? string.Empty);
+            client.BaseAddress = new(configuration["PROCESSOR:PAYMENT_PROCESSOR_FALLBACK_URL"] ?? string.Empty);
             client.DefaultRequestHeaders.Accept.Add(new("application/json"));
         });
 
